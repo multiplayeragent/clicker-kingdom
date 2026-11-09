@@ -1,0 +1,654 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Clicker Kingdom</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; overscroll-behavior: none; background: #7ec8f5; }
+  body { font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #2b2140; user-select: none; -webkit-user-select: none; }
+  canvas { display: block; position: fixed; left: 0; top: 0; touch-action: none; cursor: pointer; }
+  .hud { position: fixed; pointer-events: none; }
+  #gold { top: max(10px, env(safe-area-inset-top)); text-align: center; font-weight: 900; font-size: 34px; color: #fff; text-shadow: 0 3px 0 #b3741b, 0 5px 10px #0005; transition: transform .08s; }
+  #gold small { display: block; font-size: 14px; font-weight: 700; text-shadow: 0 1px 3px #0008; }
+  #givers { top: calc(max(10px, env(safe-area-inset-top)) + 4px); left: 12px; font-size: 13px; min-width: 150px; padding: 8px 10px; border-radius: 12px; background: #ffffffcc; box-shadow: 0 2px 8px #0002; }
+  #givers b { display: block; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: #8a6d1d; }
+  #givers div { display: flex; justify-content: space-between; gap: 12px; }
+  #givers .me { font-weight: 800; color: #b3741b; }
+  #net { left: 12px; bottom: max(8px, env(safe-area-inset-bottom)); font-size: 12px; color: #fff; text-shadow: 0 1px 3px #000a; }
+  #saved { left: 12px; bottom: calc(max(8px, env(safe-area-inset-bottom)) + 18px); font-size: 12px; color: #fff; text-shadow: 0 1px 3px #000a; opacity: 0; transition: opacity .5s; }
+  #saved.on { opacity: .9; }
+  #hint { left: 0; right: 0; text-align: center; font-size: 18px; font-weight: 800; color: #fff; text-shadow: 0 2px 4px #0009; transition: opacity .8s; }
+  #toast { left: 16px; right: 16px; text-align: center; font-size: 17px; font-weight: 800; color: #fff; text-shadow: 0 2px 4px #000b; opacity: 0; transition: opacity .4s; }
+  #toast.on { opacity: 1; }
+  #shop { position: fixed; right: 0; top: 0; bottom: 0; width: 300px; overflow-y: auto; touch-action: pan-y; background: #fff8e8; box-shadow: -4px 0 16px #0003; padding: max(10px, env(safe-area-inset-top)) 10px 10px; box-sizing: border-box; }
+  #shop h3 { margin: 6px 4px; font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: #8a6d1d; }
+  .item { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 52px; margin: 0 0 6px; padding: 6px 10px; border: 2px solid #e6d3a3; border-radius: 12px; background: #fff; font: inherit; color: inherit; text-align: left; cursor: pointer; }
+  .item:active { transform: scale(.97); }
+  .item .ic { font-size: 26px; width: 32px; text-align: center; }
+  .item .tx { flex: 1; line-height: 1.2; }
+  .item .tx small { display: block; color: #7a6a52; font-size: 12px; }
+  .item .cost { font-weight: 800; color: #b3741b; white-space: nowrap; }
+  .item .own { font-weight: 900; font-size: 20px; color: #c9b27a; min-width: 26px; text-align: right; }
+  .item.poor { opacity: .45; }
+  .item[hidden] { display: none; }
+  #ups { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+  #ups .item { width: auto; flex: 1 1 120px; margin: 0; }
+  #boardBtn { position: fixed; top: max(10px, env(safe-area-inset-top)); right: 312px; width: 44px; height: 44px; border-radius: 12px; border: 0; background: #ffffffcc; font-size: 20px; cursor: pointer; box-shadow: 0 2px 8px #0002; }
+  @media (max-width: 759px) {
+    #shop { top: auto; left: 0; width: auto; height: min(42vh, 360px); padding-bottom: max(10px, env(safe-area-inset-bottom)); border-radius: 18px 18px 0 0; box-shadow: 0 -4px 16px #0003; }
+    #boardBtn { right: 10px; }
+    #givers { display: none; }
+    #net { bottom: auto; top: calc(max(10px, env(safe-area-inset-top)) + 84px); left: 50%; transform: translateX(-50%); white-space: nowrap; }
+    #saved { bottom: auto; top: calc(max(10px, env(safe-area-inset-top)) + 102px); left: 50%; transform: translateX(-50%); }
+  }
+  #over { position: fixed; inset: 0; display: grid; place-items: center; background: #2b214099; }
+  #over[hidden] { display: none; }
+  .card { width: min(340px, 88vw); padding: 22px; border-radius: 16px; background: #fff8e8; text-align: center; box-shadow: 0 10px 30px #0005; }
+  .card h2 { margin: 0 0 4px; font-size: 24px; }
+  .card ol { text-align: left; margin: 14px 0; padding-left: 26px; font-size: 14px; min-height: 40px; }
+  .card li span { float: right; font-weight: 700; color: #b3741b; }
+  button.go { width: 100%; min-height: 48px; border: 0; border-radius: 12px; background: #f2b630; color: #3a2400; font: 800 17px system-ui, sans-serif; cursor: pointer; }
+  .attract #shop, .attract #givers, .attract #net, .attract #boardBtn, .attract #hint, .attract #saved { display: none !important; }
+</style>
+<script src="https://cdn.multiplayeragent.com/sdk/mp.global.js"></script>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div class="hud" id="gold">0<small>&nbsp;</small></div>
+<div class="hud" id="givers"></div>
+<div class="hud" id="hint"></div>
+<div class="hud" id="toast"></div>
+<div class="hud" id="saved">✓ Kingdom saved</div>
+<div class="hud" id="net">Connecting…</div>
+<button id="boardBtn" title="Top contributors">🏆</button>
+<div id="shop"><h3>Upgrades</h3><div id="ups"></div><h3>Buildings</h3><div id="builds"></div></div>
+<div id="over" hidden>
+  <div class="card">
+    <h2>Top contributors</h2>
+    <div id="mine"></div>
+    <ol id="board"><li>Loading the leaderboard…</li></ol>
+    <button class="go" id="back">Back to the kingdom</button>
+  </div>
+</div>
+<script>
+/* ═══ CLICKER KINGDOM · a Multiplayer Agent starter ═══════════════════════════════════
+ * Everyone grows one kingdom together. Drop-in, 2–30 players; bot helpers click and buy.
+ *
+ * WHERE THINGS ARE (search for the "── " headers):
+ *   CONFIG ........ clicks, prices, bots, and the BUILDINGS / UPGRADES / TIERS lists
+ *   CONNECTION .... MP_CONNECT, joining, the offline room, who is host
+ *   WORLD MEMORY .. how the kingdom survives the room emptying (same code in every starter)
+ *   KINGDOM ....... prices and income worked out from state (everyone uses these)
+ *   KINGDOM (HOST)  counting clicks, checking purchases, income, bots, writing `kingdom`
+ *   ME ............ clicking: floating numbers, coins, sending clicks in batches
+ *   DRAW .......... sky, hills, the castle and every building, effects
+ *   HUD & BOARD ... gold, shop, top givers, toasts, leaderboard card
+ *   INPUT ......... click/tap the kingdom, Space to click
+ *
+ * HOW THE MULTIPLAYER WORKS (a relay room: no server code):
+ *   - Each player writes its OWN entity: `hb` (heartbeat) once a second and `n`/`h`
+ *     (name, color) once. That's all: the kingdom itself belongs to the host.
+ *   - The HOST is the lowest sessionId among live players (heartbeat seen in the last
+ *     3s), worked out every frame. Only the host writes the shared field `kingdom` (one
+ *     JSON: rev, gold, earned, buildings, upgrades, and the top givers) 4 times a second.
+ *     A new host adopts it from state and carries on.
+ *   - Everyone else sends intents: "click" {n} (clicks batched about twice a second) and
+ *     "buy" {k} (a building or upgrade). The host checks the price and applies it.
+ *     "built" {k, n} is an event just for the toast; the new building is in state.
+ *   - The kingdom outlives the room through WORLD MEMORY (see that section), and its
+ *     buildings keep earning while nobody is there.
+ *   - ?attract plays offline with bots only (the preview video is recorded from it).
+ *   - Leaderboard "gold-given": gold each player has given through clicks, all time.
+ */
+
+// ── CONFIG ──────────────────────────────────────────────────────────────────────────
+const CONFIG = {
+  name: "Clickshire",        // the kingdom's name
+  batchMs: 500,              // your clicks go to the host in batches this often (about 2 a second)
+  maxClicksPerBatch: 15,     // the host ignores clicks beyond this per batch (30 a second)
+  clickGpsShare: 0.02,       // each click also gives this share of the gold-per-second
+  costGrowth: 1.15,          // each building costs this much more than the last of its kind
+  awayRate: 0.5,             // share of the income earned while the room was empty
+  awayCapHours: 8,           // ...for at most this long
+  seats: 4,                  // bot helpers fill the kingdom up to this many players
+  botClicks: [2, 5],         // a bot clicks between this many times a second
+  botShopMs: 6000,           // ms between bot shopping trips
+  board: "gold-given",       // leaderboard name
+  saveNs: "clicker-kingdom", // player-save namespace for world memory
+  saveEvery: 10000,          // ms between world-memory saves
+};
+const BUILDINGS = [ // gps = gold per second each
+  { k: "farm", name: "Farm", icon: "🌾", cost: 15, gps: 0.5 },
+  { k: "mill", name: "Windmill", icon: "🌀", cost: 120, gps: 3 },
+  { k: "mine", name: "Mine", icon: "⛏️", cost: 900, gps: 15 },
+  { k: "market", name: "Market", icon: "🎪", cost: 6000, gps: 70 },
+  { k: "tower", name: "Wizard tower", icon: "🔮", cost: 40000, gps: 400 },
+  { k: "dragon", name: "Dragon roost", icon: "🐉", cost: 300000, gps: 2500 },
+];
+const UPGRADES = [ // click: clicks ×; k + mult: one building ×; all: everything ×
+  { id: "gloves", name: "Golden gloves", icon: "🧤", cost: 100, desc: "Clicks ×2", click: 2 },
+  { id: "plows", name: "Iron plows", icon: "🔧", cost: 600, desc: "Farms ×2", k: "farm", mult: 2 },
+  { id: "sails", name: "Silk sails", icon: "⛵", cost: 3000, desc: "Windmills ×2", k: "mill", mult: 2 },
+  { id: "carts", name: "Mine carts", icon: "🛒", cost: 15000, desc: "Mines ×2", k: "mine", mult: 2 },
+  { id: "crown", name: "Royal decree", icon: "👑", cost: 40000, desc: "Clicks ×5", click: 5 },
+  { id: "guild", name: "Merchant guild", icon: "⚖️", cost: 120000, desc: "Markets ×2", k: "market", mult: 2 },
+  { id: "feast", name: "Grand feast", icon: "🍗", cost: 500000, desc: "Everything ×1.5", all: 1.5 },
+];
+const TIERS = [[0, "Hamlet"], [300, "Village"], [3000, "Town"], [30000, "City"], [300000, "Kingdom"], [3000000, "Empire"]]; // by gold earned
+const BOTS = [ // bot helpers, in the order they join
+  { name: "Sir Clicksalot", color: "#5b8def" }, { name: "Lady Penny", color: "#e0569b" },
+  { name: "Baron Goldbeard", color: "#3fb27f" }, { name: "Dame Tapworth", color: "#9b6bd6" },
+  { name: "Old Farmer Bo", color: "#e0843a" }, { name: "Squire Tim", color: "#20a4b8" },
+];
+const COLORS = ["#e94f4f", "#3d8bfd", "#f2a516", "#2fbf71", "#a25ddc", "#ff7a3d", "#14b8c4", "#ec4899"];
+
+// ── CONNECTION ──────────────────────────────────────────────────────────────────────
+// The builder fills these in for this game. Downloaded from GitHub? Put your own pk_ key here.
+const MP_CONNECT = {
+  key: 'pk_REPLACE_ME',
+  room: 'clicker-kingdom',
+  endpoint: 'wss://live.multiplayeragent.com',
+  apiUrl: 'https://api.multiplayeragent.com',
+};
+const ATTRACT = new URLSearchParams(location.search).has("attract");
+
+/** Same shape as the SDK client, kept in this tab: offline play and ?attract. */
+function localRoom() {
+  const id = "local", state = { entities: { players: { [id]: {} } }, shared: {} }, subs = [];
+  let queued = false;
+  const emit = () => { if (!queued) { queued = true; queueMicrotask(() => { queued = false; subs.forEach((f) => f(state)); }); } };
+  const put = (o, k, v) => { if (typeof k === "object") Object.assign(o, k); else o[k] = v; emit(); };
+  return {
+    sessionId: id, state, offline: true,
+    me: { set: (k, v) => put(state.entities.players[id], k, v) },
+    setShared: (k, v) => put(state.shared, k, v),
+    onState: (f) => { subs.push(f); f(state); }, onJoin() {}, onLeave() {}, on() {}, send() {},
+    onDisconnect() {}, onReconnect() {}, leave: async () => {},
+  };
+}
+
+async function connect() {
+  if (ATTRACT || typeof MP === "undefined") return localRoom();
+  try {
+    const join = MP.join({ ...MP_CONNECT });
+    const mp = await Promise.race([join, new Promise((_, no) => setTimeout(() => no(new Error("timed out")), 10000))]);
+    window.mp = mp; // the builder calls window.mp.leave() when the page closes
+    return mp;
+  } catch (e) {
+    console.warn("Playing offline:", e && e.message);
+    return localRoom();
+  }
+}
+
+const parse = (v, fallback) => { if (typeof v !== "string") return fallback; try { return JSON.parse(v); } catch { return fallback; } };
+const memo = new Map();
+/** A shared JSON field, parsed once per change (read-only: never mutate what this returns). */
+function shared(key, fallback, map = (v) => v) {
+  const raw = S.shared[key], m = memo.get(key);
+  if (m && m.raw === raw) return m.v;
+  const v = map(parse(raw, fallback)); memo.set(key, { raw, v }); return v;
+}
+let net = null;      // the room client (real or local)
+let player = null;   // MP.auth client: leaderboard and world-memory saves (null offline)
+let S = { entities: { players: {} }, shared: {} }; // latest state
+const seenHb = new Map(); // sessionId -> { hb, at } on OUR clock
+
+/** Players whose heartbeat moved in the last 3s (plus us), sorted by sessionId. */
+function livePlayers() {
+  const now = performance.now(), out = [];
+  for (const [id, p] of Object.entries(S.entities.players || {})) {
+    const s = seenHb.get(id);
+    if (!s || s.hb !== p.hb) seenHb.set(id, { hb: p.hb, at: now });
+    if (id === net.sessionId || now - seenHb.get(id).at < 3000) out.push(id);
+  }
+  return out.sort();
+}
+const isHost = () => livePlayers()[0] === net.sessionId;
+
+// ── WORLD MEMORY ────────────────────────────────────────────────────────────────────
+// A relay room forgets everything when its last player leaves, so the PLAYERS remember the world:
+//   1. Every CONFIG.saveEvery ms and when the page closes, each player saves a copy of the live
+//      world with its `rev` (how many changes PEOPLE made; bots don't count, so a fresh world
+//      full of bot builds never beats a saved one) to its player save (player.data, namespace
+//      CONFIG.saveNs) and to this browser (localStorage). A copy with a higher rev than the live
+//      world is never overwritten: it is kept and offered.
+//   2. The first player into an empty room becomes host and loads its copy into shared.
+//   3. A player who joins holding a copy with a HIGHER rev than the live world offers it: it
+//      writes the copy into its own entity (`wmh` header, `wm0`, `wm1`… chunks under 2048
+//      characters) and the host adopts it. The copy with more building in it wins; changes
+//      made only in the other copy are lost.
+// The game supplies worldSnapshot(), liveRev() (-1 = no world yet) and loadWorld(world, rev).
+const memory = { saved: null, ready: false, cloud: null, lastJson: "", lastSave: 0, offerRev: 0, offerN: 0 };
+const memoryKey = () => "mpa-world:" + MP_CONNECT.room + (net.offline ? ":offline" : "");
+
+/** Read my copy: this browser's and my cloud save, whichever has the higher rev. */
+async function loadMemory() {
+  let best = null;
+  try { best = JSON.parse(localStorage.getItem(memoryKey()) || "null"); } catch {}
+  if (player) {
+    try {
+      const doc = (await player.data.get(CONFIG.saveNs)).data;
+      if (doc && doc.room === MP_CONNECT.room && doc.world && (!best || doc.rev > best.rev)) best = doc;
+      memory.cloud = true;
+    } catch (e) { memory.cloud = false; console.warn("World memory: no cloud save, this browser only:", e && e.message); }
+  }
+  memory.saved = best && best.room === MP_CONNECT.room && best.world && typeof best.rev === "number" ? best : null;
+  memory.lastJson = memory.saved ? JSON.stringify(memory.saved.world) : "";
+  memory.ready = true;
+}
+
+/** Save my copy of the live world, unless it is unchanged or older than the copy I hold. */
+function rememberWorld() {
+  if (ATTRACT || !memory.ready) return;
+  const rev = liveRev();
+  if (rev < 0 || (memory.saved && rev < memory.saved.rev)) return; // mine is newer: keep it, keep offering it
+  const doc = { room: MP_CONNECT.room, rev, at: Date.now(), world: worldSnapshot() };
+  const json = JSON.stringify(doc.world);
+  if (json === memory.lastJson) return;
+  memory.lastJson = json; memory.saved = doc;
+  try { localStorage.setItem(memoryKey(), JSON.stringify(doc)); } catch {}
+  if (player && memory.cloud) {
+    player.data.set(doc, { namespace: CONFIG.saveNs })
+      .catch((e) => e && e.current ? player.data.set(doc, { namespace: CONFIG.saveNs, version: e.current.version }) : Promise.reject(e))
+      .catch((e) => { if (e && (e.status === 401 || e.status === 403)) memory.cloud = false; });
+  }
+  const tag = document.getElementById("saved");
+  if (tag) { tag.classList.add("on"); setTimeout(() => tag.classList.remove("on"), 1600); }
+}
+
+/** Once a second: offer my copy if it beats the live world (the host simply loads it). */
+function offerMemory() {
+  if (ATTRACT || !memory.ready) return;
+  const mine = memory.saved, live = liveRev(), better = mine && mine.rev > live;
+  if (isHost()) {
+    if (memory.offerRev) clearOffer();
+    if (better && live >= 0 && loadWorld(mine.world, mine.rev)) memoryAdopted("");
+    return;
+  }
+  if (better && memory.offerRev !== mine.rev) {
+    const json = JSON.stringify(mine.world), fields = {}, n = Math.ceil(json.length / 1900);
+    if (n > 40) return; // too big for my entity: keep it for when I am host
+    for (let i = 0; i < n; i++) fields["wm" + i] = "~" + json.slice(i * 1900, (i + 1) * 1900); // "~" keeps it a string
+    net.me.set(fields);
+    net.me.set("wmh", JSON.stringify({ room: MP_CONNECT.room, rev: mine.rev, n })); // header last: chunks land first
+    memory.offerRev = mine.rev; memory.offerN = n;
+  } else if (!better && memory.offerRev) clearOffer();
+}
+function clearOffer() {
+  const fields = { wmh: "" };
+  for (let i = 0; i < memory.offerN; i++) fields["wm" + i] = "";
+  net.me.set(fields); memory.offerRev = 0; memory.offerN = 0;
+}
+
+/** Host, once a second: adopt the best complete offer that beats the live world. */
+function adoptOffers() {
+  let best = null;
+  for (const id of livePlayers()) {
+    const p = S.entities.players[id], h = id !== net.sessionId && parse(p && p.wmh, null);
+    if (!h || h.room !== MP_CONNECT.room || !(h.n <= 40) || !(h.rev > liveRev()) || (best && h.rev <= best.rev)) continue;
+    let json = "";
+    for (let i = 0; i < h.n && json !== null; i++) { const c = p["wm" + i]; json = typeof c === "string" && c[0] === "~" ? json + c.slice(1) : null; }
+    const world = parse(json, null);
+    if (world) best = { rev: h.rev, world, name: p.n || "A player" };
+  }
+  if (best && loadWorld(best.world, best.rev)) memoryAdopted(best.name);
+}
+function memoryAdopted(name) {
+  const text = name ? `${name} brought back the world they saved` : "Welcome back: your saved world is loaded";
+  toast(text); net.send("memory", { text: name ? text : "The host brought back the world they saved" });
+}
+function memoryTick() {
+  offerMemory();
+  if (isHost() && !ATTRACT) adoptOffers();
+  if (performance.now() - memory.lastSave > CONFIG.saveEvery) { memory.lastSave = performance.now(); rememberWorld(); }
+}
+addEventListener("pagehide", () => rememberWorld());
+document.addEventListener("visibilitychange", () => { if (document.hidden) rememberWorld(); });
+
+// ── KINGDOM ─────────────────────────────────────────────────────────────────────────
+// A kingdom is { rev, gold, earned, b: { farm: 3, … }, u: ["gloves", …], crowd: [[name, gold, color], …] }.
+const countOf = (k, v) => (v.b && v.b[k]) || 0;
+const costOf = (bd, v) => Math.ceil(bd.cost * Math.pow(CONFIG.costGrowth, countOf(bd.k, v)));
+function multOf(k, v) { let m = 1; for (const up of UPGRADES) if (v.u.includes(up.id)) m *= up.k === k ? up.mult : up.all || 1; return m; }
+const gpsOf = (v) => BUILDINGS.reduce((s, bd) => s + countOf(bd.k, v) * bd.gps * multOf(bd.k, v), 0);
+const clickOf = (v) => UPGRADES.reduce((m, up) => (v.u.includes(up.id) && up.click ? m * up.click : m), 1) * (1 + gpsOf(v) * CONFIG.clickGpsShare);
+const tierOf = (v) => TIERS.filter(([at]) => v.earned >= at).length - 1;
+const EMPTY = { rev: -1, gold: 0, earned: 0, b: {}, u: [], crowd: [] };
+/** A kingdom from the wire or a save, checked field by field. */
+function cleanKingdom(k) {
+  if (!k || typeof k !== "object") return null;
+  const num = (v) => (Number.isFinite(v) && v >= 0 ? v : 0), b = {};
+  for (const bd of BUILDINGS) b[bd.k] = Math.min(100000, Math.floor(num(k.b && k.b[bd.k])));
+  return {
+    rev: Number.isFinite(k.rev) ? k.rev : 0, gold: num(k.gold), earned: num(k.earned), b,
+    u: Array.isArray(k.u) ? UPGRADES.filter((up) => k.u.includes(up.id)).map((up) => up.id) : [],
+    crowd: Array.isArray(k.crowd) ? k.crowd.filter((c) => Array.isArray(c) && typeof c[0] === "string").slice(0, 20).map((c) => [c[0].slice(0, 24), num(c[1]), typeof c[2] === "string" ? c[2] : "#888"]) : [],
+    t: Number.isFinite(k.t) ? k.t : 0,
+  };
+}
+/** The kingdom everyone draws: the host's own copy, or the shared field. */
+function kingdom() {
+  if (isHost() && kd.adopted) return kd.view;
+  return shared("kingdom", null, cleanKingdom) || EMPTY;
+}
+
+// ── KINGDOM (HOST) ──────────────────────────────────────────────────────────────────
+const kd = { adopted: false, rev: 0, gold: 0, earned: 0, b: {}, u: [], crowd: new Map(), view: EMPTY, lastWrite: 0, lastBots: 0, lastShop: 0 };
+let startedAt = 0;
+function setKingdom(k) { // install a clean kingdom as the host's own
+  Object.assign(kd, { adopted: true, rev: k.rev, gold: k.gold, earned: k.earned, b: { ...k.b }, u: [...k.u], crowd: new Map(k.crowd.map(([n, g, c]) => [n, { g, c }])) });
+  refreshView();
+}
+function refreshView() {
+  const crowd = [...kd.crowd].sort((a, b) => b[1].g - a[1].g).slice(0, 20).map(([n, { g, c }]) => [n, Math.floor(g), c]);
+  kd.view = { rev: kd.rev, gold: Math.floor(kd.gold), earned: Math.floor(kd.earned), b: kd.b, u: kd.u, crowd };
+}
+/** World memory: install a saved kingdom, plus what its buildings earned while nobody was here. */
+function loadWorld(snap, rev) {
+  const k = cleanKingdom(snap);
+  if (!k || typeof rev !== "number") return false;
+  setKingdom({ ...k, rev });
+  const away = Math.min(CONFIG.awayCapHours * 3600, Math.max(0, (Date.now() - k.t) / 1000)), bonus = k.t ? gpsOf(kd) * away * CONFIG.awayRate : 0;
+  if (bonus >= 1) { kd.gold += bonus; kd.earned += bonus; refreshView(); const text = `While everyone was away, ${CONFIG.name} earned ${fmt(bonus)} gold`; setTimeout(() => toast(text), 3600); net.send("toast", { text }); }
+  return true;
+}
+function worldSnapshot() { const k = kingdom(); return { gold: k.gold, earned: k.earned, b: k.b, u: k.u, crowd: k.crowd, t: Date.now() }; }
+function liveRev() { return isHost() && kd.adopted ? kd.rev : kingdom().rev; }
+
+const whoIs = (from) => from && from.name ? from : from === net.sessionId ? { name: me.name, color: me.color } : { name: String(S.entities.players[from]?.n || "Player").slice(0, 24), color: S.entities.players[from]?.h || "#888" };
+/** A "click" intent: n clicks (capped) at today's click value. People's clicks count toward rev. */
+function applyClicks(from, m, human) {
+  const n = Math.max(0, Math.min(CONFIG.maxClicksPerBatch, Math.floor(Number(m && m.n) || 0)));
+  if (!n) return;
+  const g = n * clickOf(kd), who = whoIs(from), c = kd.crowd.get(who.name) || { g: 0, c: who.color };
+  kd.gold += g; kd.earned += g; c.g += g; c.c = who.color; kd.crowd.set(who.name, c);
+  if (kd.crowd.size > 30) kd.crowd.delete([...kd.crowd].sort((a, b) => a[1].g - b[1].g)[0][0]); // keep the top givers
+  if (human) kd.rev++;
+}
+/** A "buy" intent: a building or an upgrade, if the kingdom can afford it. */
+function applyBuy(from, m, human) {
+  const k = m && m.k, bd = BUILDINGS.find((b) => b.k === k), up = UPGRADES.find((u) => u.id === k);
+  if (bd && kd.gold >= costOf(bd, kd)) { kd.gold -= costOf(bd, kd); kd.b[k] = countOf(k, kd) + 1; }
+  else if (up && !kd.u.includes(k) && kd.gold >= up.cost) { kd.gold -= up.cost; kd.u.push(k); }
+  else return false;
+  if (human) kd.rev++;
+  refreshView();
+  const msg = { k, n: whoIs(from).name };
+  net.send("built", msg); showBuilt(msg);
+  return true;
+}
+
+function hostTick(dt, now) {
+  if (!kd.adopted) {
+    const live = shared("kingdom", null, cleanKingdom);
+    if (live) setKingdom(live);
+    else if (memory.ready || now - startedAt > 3000) { if (!(memory.saved && loadWorld(memory.saved.world, memory.saved.rev))) setKingdom({ ...EMPTY, rev: 0 }); else memoryAdopted(""); }
+    else return; // first one here: wait a moment for my saved kingdom
+  }
+  const income = gpsOf(kd) * dt; kd.gold += income; kd.earned += income;
+  botsTick(now);
+  if (now - kd.lastWrite > 250) { kd.lastWrite = now; refreshView(); net.setShared("kingdom", JSON.stringify(kd.view)); }
+}
+
+// Bot helpers: click a few times a second, and now and then buy the best deal they can afford twice over.
+function botsTick(now) {
+  const humans = livePlayers().length - (ATTRACT ? 1 : 0), bots = BOTS.slice(0, Math.max(0, CONFIG.seats - humans));
+  if (now - kd.lastBots > CONFIG.batchMs) {
+    kd.lastBots = now;
+    for (const b of bots) applyClicks(b, { n: Math.round((CONFIG.botClicks[0] + Math.random() * (CONFIG.botClicks[1] - CONFIG.botClicks[0])) * CONFIG.batchMs / 1000) }, false);
+  }
+  if (bots.length && now - kd.lastShop > CONFIG.botShopMs) {
+    kd.lastShop = now;
+    const bot = bots[Math.floor(Math.random() * bots.length)];
+    const up = UPGRADES.find((u) => !kd.u.includes(u.id) && kd.gold >= u.cost * 2);
+    const deals = BUILDINGS.filter((bd) => kd.gold >= costOf(bd, kd) * 2).sort((a, b) => costOf(a, kd) / a.gps - costOf(b, kd) / b.gps);
+    if (up) applyBuy(bot, { k: up.id }, false); else if (deals[0]) applyBuy(bot, { k: deals[0].k }, false);
+  }
+}
+
+// ── ME ──────────────────────────────────────────────────────────────────────────────
+const me = { name: "", color: COLORS[0], pending: 0, lastBatch: 0, shown: 0, squash: 0, baseline: null, sent: 0 };
+const floats = [], coins = [];
+function tap(x, y) {
+  const v = kingdom(); if (v.rev < 0) return;
+  me.pending++; me.squash = 1;
+  floats.push({ x: x + (Math.random() - 0.5) * 20, y, text: "+" + fmt(clickOf(v)), color: "#fff", size: 26, t0: performance.now() });
+  for (let i = 0; i < 4; i++) coins.push({ x, y, vx: (Math.random() - 0.5) * 260, vy: -150 - Math.random() * 200, life: 0.9 });
+  sfx(520 + Math.random() * 80);
+  if (me.hint) { me.hint = false; $("hint").style.opacity = 0; }
+}
+function sendClicks(now) {
+  if (now - me.lastBatch < CONFIG.batchMs || !me.pending) return;
+  me.lastBatch = now;
+  const msg = { n: me.pending }; me.pending = 0;
+  if (isHost()) applyClicks(net.sessionId, msg, true); else net.send("click", msg);
+}
+function buy(k) {
+  if (ATTRACT) return;
+  if (isHost()) applyBuy(net.sessionId, { k }, true); else net.send("buy", { k });
+  sfx(330, "square");
+}
+
+// ── DRAW ────────────────────────────────────────────────────────────────────────────
+const cv = document.getElementById("game"), ctx = cv.getContext("2d");
+let W = 0, H = 0, DPR = 1, SW = 0, SH = 0; // SW/SH: the scene, not covered by the shop
+function fit() {
+  DPR = Math.min(2, devicePixelRatio || 1); W = innerWidth; H = innerHeight; cv.width = W * DPR; cv.height = H * DPR;
+  cv.style.width = W + "px"; cv.style.height = H + "px";
+  const wide = W >= 760; SW = ATTRACT || !wide ? W : W - 300; SH = ATTRACT || wide ? H : H - Math.min(H * 0.42, 360);
+  $("gold").style.left = "0px"; $("gold").style.width = SW + "px";
+  $("hint").style.top = Math.round(SH * 0.34) + "px"; $("toast").style.top = Math.round(Math.max(126, SH * 0.2)) + "px";
+  $("hint").style.width = $("toast").style.width = SW - 32 + "px";
+}
+addEventListener("resize", fit); addEventListener("orientationchange", fit);
+const ground = () => SH * 0.74, unit = () => Math.min(SW, SH * 1.3) / 10;
+const pops = new Map(); // "farm:2" -> time it appeared
+const SHOWN = 5;        // copies of each building drawn; more show as a ×N badge
+function slotOf(i, n) { // where copy n of building kind i stands: kinds alternate left/right, later kinds further up the hill
+  const side = i % 2 ? 1 : -1, row = Math.floor(i / 2), u = unit();
+  return { x: SW / 2 + side * (u * (2.2 + row * 0.3) + n * u * 0.5), y: ground() - row * u * 0.5 + (n % 2) * u * 0.18 + u * 0.1, s: u * (0.78 - row * 0.1) };
+}
+function draw(now, dt) {
+  const t = now / 1000, v = kingdom(), u = unit(), gy = ground();
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  const sky = ctx.createLinearGradient(0, 0, 0, gy); sky.addColorStop(0, "#5fb4ef"); sky.addColorStop(1, "#cdeefe");
+  ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = "#fff3b0"; ctx.beginPath(); ctx.arc(SW * 0.12, SH * 0.16, u * 0.6, 0, 7); ctx.fill();
+  ctx.fillStyle = "#ffffffd0";
+  for (let i = 0; i < 4; i++) { const cx = ((t * (8 + i * 3) + i * 300) % (SW + 300)) - 150, cy = SH * (0.1 + i * 0.07); for (const [dx, r] of [[0, 1], [0.9, 0.75], [-0.9, 0.7]]) { ctx.beginPath(); ctx.arc(cx + dx * u * 0.5, cy, r * u * 0.42, 0, 7); ctx.fill(); } }
+  ctx.fillStyle = "#93d36f"; ctx.beginPath(); ctx.moveTo(0, gy);
+  for (let x = 0; x <= SW; x += 20) ctx.lineTo(x, gy - u * 0.9 - Math.sin(x / SW * 6 + 1) * u * 0.45); ctx.lineTo(SW, gy); ctx.fill();
+  ctx.fillStyle = "#6cc04a"; ctx.fillRect(0, gy, W, H - gy);
+  ctx.fillStyle = "#62b542"; ctx.beginPath(); ctx.ellipse(SW / 2, gy + u * 0.2, u * 2.6, u * 0.5, 0, 0, 7); ctx.fill();
+  // buildings (back to front), the castle, then effects
+  const list = [];
+  BUILDINGS.forEach((bd, i) => { for (let n = 0; n < Math.min(SHOWN, countOf(bd.k, v)); n++) list.push({ bd, i, n, ...slotOf(i, n) }); });
+  list.sort((a, b) => a.y - b.y);
+  for (const b of list) {
+    const p = pops.get(b.bd.k + ":" + b.n), k = p ? Math.min(1, (now - p) / 400) : 1, s = b.s * (k < 1 ? 1 + Math.sin(k * Math.PI) * 0.35 : 1) * Math.min(1, k * 3);
+    ctx.save(); ctx.translate(b.x, b.y); ctx.scale(s / 40, s / 40); DRAWERS[b.bd.k](t + b.n); ctx.restore();
+  }
+  BUILDINGS.forEach((bd, i) => { const c = countOf(bd.k, v); if (c > SHOWN) { const s = slotOf(i, SHOWN - 1); badge(s.x, s.y - s.s * 1.3, "×" + c); } });
+  drawCastle(SW / 2, gy, u * 1.45 * (1 + tierOf(v) * 0.05), tierOf(v), me.squash, t);
+  me.squash = Math.max(0, me.squash - dt * 7);
+  for (let i = coins.length - 1; i >= 0; i--) { const c = coins[i]; c.life -= dt; c.vy += 600 * dt; c.x += c.vx * dt; c.y += c.vy * dt; if (c.life <= 0) { coins.splice(i, 1); continue; } ctx.fillStyle = "#f7c531"; ctx.strokeStyle = "#b3741b"; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(c.x, c.y, 7, 7 * Math.abs(Math.cos(c.life * 9)) + 1, 0, 0, 7); ctx.fill(); ctx.stroke(); }
+  ctx.textAlign = "center"; ctx.lineJoin = "round";
+  for (let i = floats.length - 1; i >= 0; i--) {
+    const f = floats[i], k = (now - f.t0) / 1000; if (k > 1) { floats.splice(i, 1); continue; }
+    ctx.globalAlpha = 1 - k * k; ctx.font = `900 ${f.size * (k < 0.15 ? 0.7 + k * 2 : 1)}px system-ui, sans-serif`;
+    ctx.lineWidth = 5; ctx.strokeStyle = "#5a3a0acc"; ctx.strokeText(f.text, f.x, f.y - k * 70); ctx.fillStyle = f.color; ctx.fillText(f.text, f.x, f.y - k * 70);
+  }
+  ctx.globalAlpha = 1;
+}
+function badge(x, y, text) { ctx.font = "800 13px system-ui, sans-serif"; ctx.textAlign = "center"; const w = ctx.measureText(text).width + 12; ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.roundRect(x - w / 2, y - 10, w, 20, 10); ctx.fill(); ctx.fillStyle = "#b3741b"; ctx.fillText(text, x, y + 5); }
+function drawCastle(cx, gy, s, tier, squash, t) {
+  ctx.save(); ctx.translate(cx, gy); ctx.scale(1 + squash * 0.07, 1 - squash * 0.09);
+  const stone = "#dfe3ea", line = "#8d94a6", roof = tier >= 4 ? "#f2c230" : "#e2533f";
+  const towers = tier >= 2 ? [[-1.05, 0.95], [1.05, 0.95], [-0.62, 1.45], [0.62, 1.45]] : [[-0.62, 1.3], [0.62, 1.3]];
+  if (tier >= 3) { ctx.fillStyle = "#c8ccd6"; ctx.fillRect(-s * 1.5, -s * 0.45, s * 3, s * 0.45); for (let x = -1.5; x < 1.5; x += 0.2) ctx.fillRect(x * s, -s * 0.55, s * 0.12, s * 0.1); }
+  for (const [x, h] of towers) tower(x * s, s * 0.36, s * h, roof, t + x);
+  ctx.fillStyle = stone; ctx.strokeStyle = line; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.rect(-s * 0.5, -s * 1.05, s, s * 1.05); ctx.fill(); ctx.stroke();
+  for (let x = -0.5; x < 0.5; x += 0.2) { ctx.fillRect(x * s, -s * 1.17, s * 0.12, s * 0.13); ctx.strokeRect(x * s, -s * 1.17, s * 0.12, s * 0.13); }
+  ctx.fillStyle = "#7a4a26"; ctx.beginPath(); ctx.moveTo(-s * 0.16, 0); ctx.lineTo(-s * 0.16, -s * 0.3); ctx.arc(0, -s * 0.3, s * 0.16, Math.PI, 0); ctx.lineTo(s * 0.16, 0); ctx.fill();
+  ctx.fillStyle = "#4a5470"; for (const x of [-0.28, 0.2]) ctx.fillRect(x * s, -s * 0.78, s * 0.08, s * 0.16);
+  if (tier >= 5) { ctx.fillStyle = "#f2c230"; ctx.beginPath(); ctx.moveTo(-s * 0.2, -s * 1.2); for (const [x, y] of [[-0.12, -1.38], [0, -1.24], [0.12, -1.38], [0.2, -1.2]]) ctx.lineTo(x * s, y * s); ctx.fill(); }
+  ctx.restore();
+}
+function tower(x, w, h, roof, t) {
+  ctx.fillStyle = "#d3d8e1"; ctx.strokeStyle = "#8d94a6"; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.rect(x - w / 2, -h, w, h); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = roof; ctx.beginPath(); ctx.moveTo(x - w * 0.65, -h); ctx.lineTo(x, -h - w * 1.3); ctx.lineTo(x + w * 0.65, -h); ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.strokeStyle = "#6b5a45"; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x, -h - w * 1.3); ctx.lineTo(x, -h - w * 1.9); ctx.stroke();
+  ctx.fillStyle = "#3d8bfd"; ctx.beginPath(); ctx.moveTo(x, -h - w * 1.9); ctx.quadraticCurveTo(x + w * 0.4, -h - w * 1.75 + Math.sin(t * 5) * 3, x + w * 0.8, -h - w * 1.8); ctx.lineTo(x, -h - w * 1.5); ctx.fill();
+}
+// Each building is drawn around (0, 0) = the middle of its base, about 40 units wide.
+const DRAWERS = {
+  farm() { stripes(-24, 4, 48, 10, ["#e8c547", "#8cc152"]); box(-12, -18, 24, 18, "#f3e2c0"); roofTri(-15, -18, 30, 14, "#d9553f"); box(-3, -9, 6, 9, "#8a5a36"); },
+  mill(t) { box(-8, -30, 16, 30, "#f4f1ea"); roofTri(-10, -30, 20, 10, "#8a5a36"); ctx.save(); ctx.translate(0, -28); ctx.rotate(t * 2.5); ctx.fillStyle = "#c9b27a"; for (let i = 0; i < 4; i++) { ctx.rotate(Math.PI / 2); ctx.fillRect(-2, 0, 4, 24); ctx.fillRect(1, 6, 7, 16); } ctx.restore(); },
+  mine(t) { ctx.fillStyle = "#8d8a86"; ctx.beginPath(); ctx.ellipse(0, 0, 24, 20, 0, Math.PI, 0); ctx.fill(); ctx.fillStyle = "#2c2622"; ctx.beginPath(); ctx.ellipse(-2, 0, 8, 12, 0, Math.PI, 0); ctx.fill(); const cx = 6 + Math.sin(t) * 6; box(cx, -7, 12, 7, "#6b5a45"); ctx.fillStyle = "#f2c230"; ctx.beginPath(); ctx.arc(cx + 6, -8, 4, Math.PI, 0); ctx.fill(); },
+  market() { box(-18, -16, 36, 16, "#f3e2c0"); stripes(-21, -26, 42, 10, ["#e94f4f", "#fff"], true); ctx.fillStyle = "#f2c230"; ctx.beginPath(); ctx.arc(-8, -5, 4, 0, 7); ctx.arc(4, -5, 4, 0, 7); ctx.fill(); },
+  tower(t) { box(-8, -42, 16, 42, "#7b5cc4"); roofTri(-11, -42, 22, 16, "#4b3590"); ctx.fillStyle = `hsl(${(t * 80) % 360},90%,70%)`; ctx.beginPath(); ctx.arc(0, -62, 5 + Math.sin(t * 4), 0, 7); ctx.fill(); },
+  dragon(t) { ctx.fillStyle = "#8d8a86"; ctx.beginPath(); ctx.ellipse(0, 0, 24, 12, 0, Math.PI, 0); ctx.fill(); ctx.fillStyle = "#3fb27f"; ctx.beginPath(); ctx.ellipse(0, -16, 12, 8, 0, 0, 7); ctx.fill(); ctx.beginPath(); ctx.arc(11, -24, 6, 0, 7); ctx.fill(); const w = Math.sin(t * 6) * 8; ctx.beginPath(); ctx.moveTo(-4, -20); ctx.lineTo(-18, -34 - w); ctx.lineTo(-2, -24); ctx.fill(); ctx.fillStyle = "#fff"; ctx.fillRect(12, -27, 3, 3); },
+};
+function box(x, y, w, h, c) { ctx.fillStyle = c; ctx.strokeStyle = "#0004"; ctx.lineWidth = 1.5; ctx.fillRect(x, y, w, h); ctx.strokeRect(x, y, w, h); }
+function roofTri(x, y, w, h, c) { ctx.fillStyle = c; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + w / 2, y - h); ctx.lineTo(x + w, y); ctx.closePath(); ctx.fill(); }
+function stripes(x, y, w, h, cs, vertical) { const n = 6; for (let i = 0; i < n; i++) { ctx.fillStyle = cs[i % 2]; if (vertical) ctx.fillRect(x + i * w / n, y, w / n + 0.5, h); else ctx.fillRect(x, y + i * h / n, w, h / n + 0.5); } }
+
+// ── HUD & BOARD ─────────────────────────────────────────────────────────────────────
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+function fmt(n) {
+  if (n < 1000) return n < 10 && n % 1 ? n.toFixed(1) : String(Math.floor(n));
+  const units = ["K", "M", "B", "T", "Qa", "Qi"], e = Math.min(units.length, Math.floor(Math.log10(n) / 3));
+  return (n / Math.pow(1000, e)).toFixed(n / Math.pow(1000, e) < 100 ? 1 : 0) + units[e - 1];
+}
+const shopButtons = new Map();
+function buildShop() {
+  for (const [list, box, desc] of [[UPGRADES, "ups", (x) => x.desc], [BUILDINGS, "builds", (x) => `+${fmt(x.gps)} gold/s each`]]) {
+    for (const x of list) {
+      const b = document.createElement("button"); b.className = "item";
+      b.innerHTML = `<span class="ic">${x.icon}</span><span class="tx">${x.name}<small>${desc(x)}</small></span><span class="cost"></span>${box === "builds" ? '<span class="own"></span>' : ""}`;
+      b.addEventListener("click", () => buy(x.id || x.k));
+      $(box).append(b); shopButtons.set(x.id || x.k, b);
+    }
+  }
+}
+let lastView = null, lastTier = -1;
+/** Effects that come from state changes: new buildings pop in, other people's clicks float up. */
+function watchKingdom(v, now) {
+  if (v === lastView) return;
+  if (lastView && lastView.rev >= 0) {
+    for (const bd of BUILDINGS) for (let n = countOf(bd.k, lastView); n < Math.min(SHOWN, countOf(bd.k, v)); n++) { pops.set(bd.k + ":" + n, now); const s = slotOf(BUILDINGS.indexOf(bd), n); for (let i = 0; i < 8; i++) coins.push({ x: s.x, y: s.y - 20, vx: (Math.random() - 0.5) * 300, vy: -200 - Math.random() * 200, life: 1 }); }
+    const before = new Map(lastView.crowd.map(([n, g]) => [n, g]));
+    for (const [name, g, color] of v.crowd) {
+      const d = g - (before.get(name) ?? g);
+      if (d > 0 && name !== me.name && floats.length < 40) floats.push({ x: SW / 2 + (Math.random() - 0.5) * unit() * 4, y: ground() - unit() * (0.6 + Math.random() * 1.6), text: "+" + fmt(d), color, size: 18, t0: now });
+    }
+    if (tierOf(v) > lastTier && lastTier >= 0) toast(`${CONFIG.name} grew into a ${TIERS[tierOf(v)][1]}!`);
+  }
+  if (me.baseline === null && v.rev >= 0) { const mine = v.crowd.find((c) => c[0] === me.name); me.baseline = mine ? mine[1] : 0; }
+  lastTier = tierOf(v); lastView = v;
+}
+let lastHud = 0;
+function hud(dt, now) {
+  const v = kingdom(), n = livePlayers().length, target = v.gold + me.pending * clickOf(v);
+  me.shown += (target - me.shown) * Math.min(1, dt * 8); // the counter rolls toward the real gold
+  if (Math.abs(target - me.shown) < 1) me.shown = target;
+  $("gold").firstChild.textContent = fmt(Math.max(0, me.shown)) + " gold";
+  if (now - lastHud < 200) return;
+  lastHud = now;
+  $("gold").querySelector("small").textContent = `${CONFIG.name} · ${TIERS[Math.max(0, tierOf(v))][1]} · ${fmt(gpsOf(v))} gold per second`;
+  if (ATTRACT) return;
+  $("net").textContent = net.offline ? "Offline: playing with bots" : `Online · ${n} player${n === 1 ? "" : "s"}${isHost() ? " · you run the kingdom" : ""}`;
+  $("givers").innerHTML = "<b>Top givers</b>" + v.crowd.slice(0, 5).map(([name, g]) => `<div class="${name === me.name ? "me" : ""}"><span>${esc(name)}</span><span>${fmt(g)}</span></div>`).join("");
+  for (const bd of BUILDINGS) { const b = shopButtons.get(bd.k), c = costOf(bd, v); b.querySelector(".cost").textContent = fmt(c); b.querySelector(".own").textContent = countOf(bd.k, v) || ""; b.classList.toggle("poor", v.gold < c); b.hidden = bd.cost > v.earned * 2 + 200 && !countOf(bd.k, v); }
+  for (const up of UPGRADES) { const b = shopButtons.get(up.id); b.querySelector(".cost").textContent = fmt(up.cost); b.classList.toggle("poor", v.gold < up.cost); b.hidden = v.u.includes(up.id) || up.cost > v.earned * 2 + 200; }
+}
+function toast(text) { const t = $("toast"); t.textContent = text; t.classList.add("on"); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove("on"), 3200); }
+function showBuilt(m) {
+  const what = BUILDINGS.find((b) => b.k === m.k) || UPGRADES.find((u) => u.id === m.k);
+  const bot = BOTS.some((b) => b.name === m.n);
+  if (what && !ATTRACT && !(bot && $("toast").classList.contains("on"))) toast(`${m.n === me.name ? "You" : m.n} bought ${what.k ? "a " + what.name : what.name}!`); // a bot's purchase never covers another toast
+}
+let board = null;
+function given() { const mine = kingdom().crowd.find((c) => c[0] === me.name); return Math.max(0, Math.floor((mine ? mine[1] : 0) - (me.baseline || 0))); }
+function sendScore() { const g = given(); if (board && g > me.sent) { board.submit(g - me.sent, "inc").catch(() => {}); me.sent = g; } }
+function showBoard() {
+  $("over").hidden = false;
+  $("mine").textContent = `You gave ${fmt(given())} gold this visit.`;
+  const list = $("board");
+  if (!board) { list.innerHTML = "<li>Leaderboards need a connection.</li>"; return; }
+  list.innerHTML = "<li>Loading the leaderboard…</li>";
+  sendScore();
+  setTimeout(() => board.top(10).then(({ entries }) => {
+    list.innerHTML = entries.length ? entries.map((e) => `<li>${esc(e.username || "Player")}<span>${fmt(e.score)}</span></li>`).join("") : "<li>No givers yet. Be the first.</li>";
+  }).catch(() => { list.innerHTML = "<li>Couldn't load the leaderboard.</li>"; }), 400);
+}
+$("boardBtn").onclick = showBoard;
+$("back").onclick = () => { $("over").hidden = true; };
+let audio = null;
+function sfx(freq, type = "triangle") {
+  try {
+    audio = audio || new AudioContext();
+    const o = audio.createOscillator(), g = audio.createGain(), t = audio.currentTime;
+    o.type = type; o.frequency.setValueAtTime(freq, t); o.frequency.exponentialRampToValueAtTime(freq * 1.6, t + 0.07);
+    g.gain.setValueAtTime(0.05, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.1);
+    o.connect(g).connect(audio.destination); o.start(t); o.stop(t + 0.11);
+  } catch {}
+}
+
+// ── INPUT ───────────────────────────────────────────────────────────────────────────
+cv.addEventListener("pointerdown", (e) => { e.preventDefault(); if (e.clientY < SH && e.clientX < SW) tap(e.clientX, e.clientY); });
+addEventListener("keydown", (e) => { if (e.code === "Space" && !e.repeat) { e.preventDefault(); tap(SW / 2, ground() - unit()); } });
+cv.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
+
+// ── MAIN LOOP ───────────────────────────────────────────────────────────────────────
+let last = performance.now(), lastHb = 0, lastScore = 0, autoAt = 0;
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  if (now - lastHb > 1000) { lastHb = now; net.me.set("hb", Date.now()); }
+  if (isHost()) hostTick(dt, now); else kd.adopted = false;
+  if (ATTRACT && now > autoAt) { autoAt = now + 110 + Math.random() * 120; const u = unit(); tap(SW / 2 + (Math.random() - 0.5) * u * 2, ground() - u * (0.4 + Math.random())); } // the preview's autopilot
+  sendClicks(now);
+  watchKingdom(kingdom(), now);
+  draw(now, dt);
+  hud(dt, now);
+  if (now - lastScore > 20000) { lastScore = now; sendScore(); }
+  requestAnimationFrame(frame);
+}
+
+(async function start() {
+  document.body.classList.toggle("attract", ATTRACT);
+  if (ATTRACT) $("net").textContent = "";
+  fit(); buildShop();
+  net = await connect();
+  net.onState((st) => { S = st; });
+  net.on("click", (msg, from) => { if (isHost()) applyClicks(from, msg, true); });
+  net.on("buy", (msg, from) => { if (isHost()) applyBuy(from, msg, true); });
+  net.on("built", (msg) => { if (msg && typeof msg.n === "string") showBuilt(msg); });
+  net.on("toast", (msg) => { if (msg && typeof msg.text === "string") setTimeout(() => toast(msg.text.slice(0, 90)), 3600); });
+  net.on("memory", (m) => { if (m && typeof m.text === "string") toast(m.text.slice(0, 80)); });
+  net.onDisconnect(() => { $("net").textContent = "Reconnecting…"; });
+  if (!net.offline && typeof MP !== "undefined") { player = MP.auth({ key: MP_CONNECT.key, apiUrl: MP_CONNECT.apiUrl }); board = player.leaderboard(CONFIG.board); }
+  me.name = (() => { try { return localStorage.getItem("mpa-name") || ""; } catch { return ""; } })() ||
+    ["Merry", "Brave", "Lucky", "Jolly", "Clever", "Royal"][Math.floor(Math.random() * 6)] + " " + ["Baker", "Knight", "Miner", "Jester", "Farmer", "Bard"][Math.floor(Math.random() * 6)];
+  const taken = new Set(Object.entries(S.entities.players || {}).filter(([id]) => id !== net.sessionId).map(([, p]) => p.h));
+  me.color = COLORS.find((c) => !taken.has(c)) || COLORS[Math.floor(Math.random() * COLORS.length)];
+  net.me.set({ n: me.name, h: me.color, hb: Date.now() });
+  addEventListener("pagehide", sendScore);
+  startedAt = performance.now();
+  if (ATTRACT) { // a busy kingdom, buying fast
+    memory.ready = true; CONFIG.seats = 6; CONFIG.botClicks = [6, 10]; CONFIG.botShopMs = 700;
+    setKingdom({ ...EMPTY, rev: 0, gold: 30000, earned: 60000, b: { farm: 5, mill: 3, mine: 2, market: 1 }, u: ["gloves", "plows"] });
+  } else {
+    loadMemory();
+    me.hint = true; $("hint").textContent = "Click the kingdom to make gold!";
+  }
+  setInterval(memoryTick, 1000);
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

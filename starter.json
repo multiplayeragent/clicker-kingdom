@@ -1,0 +1,21 @@
+{
+  "name": "Clicker Kingdom",
+  "genre": "sim",
+  "dim": "2D",
+  "mode": "Drop-in",
+  "players": "2–30",
+  "hook": "Everyone grows one kingdom together.",
+  "how": "Every click adds gold to one shared kingdom. Spend it on farms, windmills and mines that keep earning, and on upgrades that make every click worth more.",
+  "controls": "Click or tap the kingdom, then tap the shop to build",
+  "uses": [
+    ["World memory", "The kingdom is remembered by the players who built it, and its farms and mines keep earning while everyone is away."],
+    ["Leaderboard", "The players who have given the kingdom the most gold."],
+    ["Host-run rules", "The host's browser counts every click and checks every purchase; if it leaves, the next player takes over."],
+    ["Bots", "Bot helpers click and buy until enough people join."]
+  ],
+  "ideas": [
+    "Add a boss everyone clicks down together",
+    "Add rival kingdoms",
+    "Add a reset that gives a permanent bonus"
+  ]
+}
