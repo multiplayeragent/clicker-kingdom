@@ -618,6 +618,7 @@ cv.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
 // ── MAIN LOOP ───────────────────────────────────────────────────────────────────────
 let last = performance.now(), lastHb = 0, lastScore = 0, autoAt = 0;
 function frame(now) {
+  requestAnimationFrame(frame);
   const dt = Math.max(0, Math.min(0.05, (now - last) / 1000)); last = now; // never negative: the first frame can be stamped before `last`
   if (now - lastHb > 1000) { lastHb = now; net.me.set("hb", Date.now()); fixColor(); }
   if (isHost()) hostTick(dt, now); else kd.adopted = false;
@@ -627,7 +628,6 @@ function frame(now) {
   draw(now, dt);
   hud(dt, now);
   if (now - lastScore > 20000) { lastScore = now; sendScore(); }
-  requestAnimationFrame(frame);
 }
 
 (async function start() {
