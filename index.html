@@ -48,6 +48,7 @@
   .card h2 { margin: 0 0 4px; font-size: 24px; }
   .card ol { text-align: left; margin: 14px 0; padding-left: 26px; font-size: 14px; min-height: 40px; }
   .card li span { float: right; font-weight: 700; color: #b3741b; }
+  .card li.note { list-style: none; margin-left: -26px; } /* a status line, not a numbered entry */
   button.go { width: 100%; min-height: 48px; border: 0; border-radius: 12px; background: #f2b630; color: #3a2400; font: 800 17px system-ui, sans-serif; cursor: pointer; }
   .attract #shop, .attract #givers, .attract #net, .attract #boardBtn, .attract #hint, .attract #saved { display: none !important; }
 </style>
@@ -67,7 +68,7 @@
   <div class="card">
     <h2>Top contributors</h2>
     <div id="mine"></div>
-    <ol id="board"><li>Loading the leaderboard…</li></ol>
+    <ol id="board"><li class="note">Loading the leaderboard…</li></ol>
     <button class="go" id="back">Back to the kingdom</button>
   </div>
 </div>
@@ -412,7 +413,7 @@ function botsTick(now) {
 }
 
 // ── ME ──────────────────────────────────────────────────────────────────────────────
-const me = { name: "", color: COLORS[0], pending: 0, lastBatch: 0, shown: 0, squash: 0, baseline: null, sent: 0 };
+const me = { name: "", color: COLORS[0], pending: 0, lastBatch: 0, shown: 0, squash: 0, baseline: null, sent: 0, unseen: 0, unseenAt: 0 }; // unseen: gold from clicks I sent that the kingdom doesn't show yet
 const floats = [], coins = [];
 function tap(x, y) {
   const v = kingdom(); if (v.rev < 0) return;
@@ -425,7 +426,7 @@ function tap(x, y) {
 function sendClicks(now) {
   if (now - me.lastBatch < CONFIG.batchMs || !me.pending) return;
   me.lastBatch = now;
-  const msg = { n: me.pending }; me.pending = 0;
+  const msg = { n: me.pending }; me.unseen += me.pending * clickOf(kingdom()); me.unseenAt = now; me.pending = 0;
   if (isHost()) applyClicks(net.sessionId, msg, true); else net.send("click", msg);
 }
 function buy(k) {
@@ -547,7 +548,8 @@ function watchKingdom(v, now) {
     for (const bd of BUILDINGS) for (let n = countOf(bd.k, lastView); n < Math.min(SHOWN, countOf(bd.k, v)); n++) { pops.set(bd.k + ":" + n, now); const s = slotOf(BUILDINGS.indexOf(bd), n); for (let i = 0; i < 8; i++) coins.push({ x: s.x, y: s.y - 20, vx: (Math.random() - 0.5) * 300, vy: -200 - Math.random() * 200, life: 1 }); }
     const before = new Map(lastView.crowd.map(([n, g]) => [n, g]));
     for (const [name, g, color] of v.crowd) {
-      const d = g - (before.get(name) ?? g);
+      const d = g - (before.get(name) ?? (name === me.name ? 0 : g));
+      if (name === me.name && d > 0) me.unseen = Math.max(0, me.unseen - d); // my clicks have landed
       if (d > 0 && name !== me.name && floats.length < 40) floats.push({ x: SW / 2 + (Math.random() - 0.5) * unit() * 4, y: ground() - unit() * (0.6 + Math.random() * 1.6), text: "+" + fmt(d), color, size: 18, t0: now });
     }
     if (tierOf(v) > lastTier && lastTier >= 0) toast(`${CONFIG.name} grew into a ${TIERS[tierOf(v)][1]}!`);
@@ -558,7 +560,8 @@ function watchKingdom(v, now) {
 let lastHud = 0;
 let dropped = false; // true while the connection is down: the HUD keeps showing "Reconnecting…"
 function hud(dt, now) {
-  const v = kingdom(), n = livePlayers().length, target = v.gold + me.pending * clickOf(v);
+  if (now - me.unseenAt > 2000) me.unseen = 0; // a batch that never landed (the host changed)
+  const v = kingdom(), n = livePlayers().length, target = v.gold + me.pending * clickOf(v) + me.unseen; // clicks still on their way count, so the counter never rolls back
   me.shown += (target - me.shown) * Math.min(1, dt * 8); // the counter rolls toward the real gold
   if (Math.abs(target - me.shown) < 1) me.shown = target;
   $("gold").firstChild.textContent = fmt(Math.max(0, me.shown)) + " gold";
@@ -584,12 +587,12 @@ function showBoard() {
   $("over").hidden = false;
   $("mine").textContent = `You gave ${fmt(given())} gold this visit.`;
   const list = $("board");
-  if (!board) { list.innerHTML = "<li>Leaderboards need a connection.</li>"; return; }
-  list.innerHTML = "<li>Loading the leaderboard…</li>";
+  if (!board) { list.innerHTML = `<li class="note">Leaderboards need a connection.</li>`; return; }
+  list.innerHTML = `<li class="note">Loading the leaderboard…</li>`;
   sendScore();
   setTimeout(() => board.top(10).then(({ entries }) => {
-    list.innerHTML = entries.length ? entries.map((e) => `<li>${esc(e.username || "Player")}<span>${fmt(e.score)}</span></li>`).join("") : "<li>No givers yet. Be the first.</li>";
-  }).catch(() => { list.innerHTML = "<li>Couldn't load the leaderboard.</li>"; }), 400);
+    list.innerHTML = entries.length ? entries.map((e) => `<li>${esc(e.username || "Player")}<span>${fmt(e.score)}</span></li>`).join("") : `<li class="note">No givers yet. Be the first.</li>`;
+  }).catch(() => { list.innerHTML = `<li class="note">Couldn't load the leaderboard.</li>`; }), 400);
 }
 $("boardBtn").onclick = showBoard;
 $("back").onclick = () => { $("over").hidden = true; };
