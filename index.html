@@ -615,7 +615,8 @@ function sfx(freq, type = "triangle") {
 }
 
 // ── INPUT ───────────────────────────────────────────────────────────────────────────
-cv.addEventListener("pointerdown", (e) => { e.preventDefault(); if (e.clientY < SH && e.clientX < SW) tap(e.clientX, e.clientY); });
+cv.addEventListener("pointerdown", (e) => { e.preventDefault(); if (e.button === 0 && e.clientY < SH && e.clientX < SW) tap(e.clientX, e.clientY); });
+cv.addEventListener("contextmenu", (e) => e.preventDefault());
 addEventListener("keydown", (e) => { if (e.code === "Space" && !e.repeat) { e.preventDefault(); tap(SW / 2, ground() - unit()); } });
 cv.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
 
