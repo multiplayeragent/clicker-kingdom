@@ -35,6 +35,7 @@
   #ups { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
   #ups .item { width: auto; flex: 1 1 120px; margin: 0; }
   #boardBtn { position: fixed; top: max(10px, env(safe-area-inset-top)); right: 312px; width: 44px; height: 44px; border-radius: 12px; border: 0; background: #ffffffcc; font-size: 20px; cursor: pointer; box-shadow: 0 2px 8px #0002; }
+  @media (min-width: 760px) and (max-width: 1099px) { #givers { top: calc(max(10px, env(safe-area-inset-top)) + 84px); } } /* below the gold, not over it */
   @media (max-width: 759px) {
     #shop { top: auto; left: 0; width: auto; height: min(42vh, 360px); padding-bottom: max(10px, env(safe-area-inset-bottom)); border-radius: 18px 18px 0 0; box-shadow: 0 -4px 16px #0003; }
     #boardBtn { right: 10px; }
@@ -107,7 +108,7 @@
 const CONFIG = {
   name: "Clickshire",        // the kingdom's name
   batchMs: 500,              // your clicks go to the host in batches this often (about 2 a second)
-  maxClicksPerBatch: 15,     // the host ignores clicks beyond this per batch (30 a second)
+  maxClicksPerBatch: 15,     // the host counts at most this many clicks per player per batch (30 a second)
   clickGpsShare: 0.02,       // each click also gives this share of the gold-per-second
   costGrowth: 1.15,          // each building costs this much more than the last of its kind
   awayRate: 0.5,             // share of the income earned while the room was empty
@@ -127,14 +128,14 @@ const BUILDINGS = [ // gps = gold per second each
   { k: "tower", name: "Wizard tower", icon: "🔮", cost: 40000, gps: 400 },
   { k: "dragon", name: "Dragon roost", icon: "🐉", cost: 300000, gps: 2500 },
 ];
-const UPGRADES = [ // click: clicks ×; k + mult: one building ×; all: everything ×
+const UPGRADES = [ // click: clicks ×; k + mult: one building ×; all: every building ×
   { id: "gloves", name: "Golden gloves", icon: "🧤", cost: 100, desc: "Clicks ×2", click: 2 },
   { id: "plows", name: "Iron plows", icon: "🔧", cost: 600, desc: "Farms ×2", k: "farm", mult: 2 },
   { id: "sails", name: "Silk sails", icon: "⛵", cost: 3000, desc: "Windmills ×2", k: "mill", mult: 2 },
   { id: "carts", name: "Mine carts", icon: "🛒", cost: 15000, desc: "Mines ×2", k: "mine", mult: 2 },
   { id: "crown", name: "Royal decree", icon: "👑", cost: 40000, desc: "Clicks ×5", click: 5 },
   { id: "guild", name: "Merchant guild", icon: "⚖️", cost: 120000, desc: "Markets ×2", k: "market", mult: 2 },
-  { id: "feast", name: "Grand feast", icon: "🍗", cost: 500000, desc: "Everything ×1.5", all: 1.5 },
+  { id: "feast", name: "Grand feast", icon: "🍗", cost: 500000, desc: "All buildings ×1.5", all: 1.5 },
 ];
 const TIERS = [[0, "Hamlet"], [300, "Village"], [3000, "Town"], [30000, "City"], [300000, "Kingdom"], [3000000, "Empire"]]; // by gold earned
 const BOTS = [ // bot helpers, in the order they join
@@ -336,14 +337,19 @@ function kingdom() {
 }
 
 // ── KINGDOM (HOST) ──────────────────────────────────────────────────────────────────
-const kd = { adopted: false, rev: 0, gold: 0, earned: 0, b: {}, u: [], crowd: new Map(), view: EMPTY, lastWrite: 0, lastBots: 0, lastShop: 0 };
+const kd = { adopted: false, rev: 0, gold: 0, earned: 0, b: {}, u: [], crowd: new Map(), view: EMPTY, lastWrite: 0, lastBots: 0, lastShop: 0, budget: new Map() }; // budget: sessionId -> { left, at }, clicks each player may still send
 let startedAt = 0;
 function setKingdom(k) { // install a clean kingdom as the host's own
   Object.assign(kd, { adopted: true, rev: k.rev, gold: k.gold, earned: k.earned, b: { ...k.b }, u: [...k.u], crowd: new Map(k.crowd.map(([n, g, c]) => [n, { g, c }])) });
   refreshView();
 }
+/** Names of the players and bot helpers here now: they always stay in the crowd, so their own totals keep counting. */
+function hereNow() { return new Set([...livePlayers().map((id) => id === net.sessionId ? me.name : String(S.entities.players[id]?.n || "")), ...BOTS.map((b) => b.name)]); }
 function refreshView() {
-  const crowd = [...kd.crowd].sort((a, b) => b[1].g - a[1].g).slice(0, 20).map(([n, { g, c }]) => [n, Math.floor(g), c]);
+  const here = hereNow(), all = [...kd.crowd].sort((a, b) => b[1].g - a[1].g);
+  const keep = new Set(all.filter(([n]) => here.has(n)).slice(0, 20).map(([n]) => n)); // people here first, then the all-time top, 20 in all
+  for (const [n] of all) if (keep.size < 20) keep.add(n);
+  const crowd = all.filter(([n]) => keep.has(n)).map(([n, { g, c }]) => [n, Math.floor(g), c]);
   kd.view = { rev: kd.rev, gold: Math.floor(kd.gold), earned: Math.floor(kd.earned), b: kd.b, u: kd.u, crowd };
 }
 /** World memory: install a saved kingdom, plus what its buildings earned while nobody was here. */
@@ -361,11 +367,16 @@ function liveRev() { return isHost() && kd.adopted ? kd.rev : kingdom().rev; }
 const whoIs = (from) => from && from.name ? from : from === net.sessionId ? { name: me.name, color: me.color } : { name: String(S.entities.players[from]?.n || "Player").slice(0, 24), color: S.entities.players[from]?.h || "#888" };
 /** A "click" intent: n clicks (capped) at today's click value. People's clicks count toward rev. */
 function applyClicks(from, m, human) {
-  const n = Math.max(0, Math.min(CONFIG.maxClicksPerBatch, Math.floor(Number(m && m.n) || 0)));
+  let n = Math.max(0, Math.min(CONFIG.maxClicksPerBatch, Math.floor(Number(m && m.n) || 0)));
+  if (typeof from === "string") { // a person: at most maxClicksPerBatch per batchMs, however many messages they send
+    const now = performance.now(), cap = CONFIG.maxClicksPerBatch, b = kd.budget.get(from) || { left: cap, at: now };
+    b.left = Math.min(cap * 2, b.left + (now - b.at) / CONFIG.batchMs * cap); b.at = now;
+    n = Math.min(n, Math.floor(b.left)); b.left -= n; kd.budget.set(from, b);
+  }
   if (!n) return;
   const g = n * clickOf(kd), who = whoIs(from), c = kd.crowd.get(who.name) || { g: 0, c: who.color };
   kd.gold += g; kd.earned += g; c.g += g; c.c = who.color; kd.crowd.set(who.name, c);
-  if (kd.crowd.size > 30) kd.crowd.delete([...kd.crowd].sort((a, b) => a[1].g - b[1].g)[0][0]); // keep the top givers
+  if (kd.crowd.size > 30) { const here = hereNow(), out = [...kd.crowd].filter(([n]) => !here.has(n)).sort((a, b) => a[1].g - b[1].g)[0]; if (out) kd.crowd.delete(out[0]); } // keep the top givers, and everyone here now
   if (human) kd.rev++;
 }
 /** A "buy" intent: a building or an upgrade, if the kingdom can afford it. */
@@ -416,21 +427,26 @@ function botsTick(now) {
 const me = { name: "", color: COLORS[0], pending: 0, lastBatch: 0, shown: 0, squash: 0, baseline: null, sent: 0, unseen: 0, unseenAt: 0 }; // unseen: gold from clicks I sent that the kingdom doesn't show yet
 const floats = [], coins = [];
 function tap(x, y) {
-  const v = kingdom(); if (v.rev < 0) return;
+  const v = kingdom(); if (v.rev < 0 || me.pending >= CONFIG.maxClicksPerBatch) return; // faster than the host counts: ignored
   me.pending++; me.squash = 1;
   floats.push({ x: x + (Math.random() - 0.5) * 20, y, text: "+" + fmt(clickOf(v)), color: "#fff", size: 26, t0: performance.now() });
   for (let i = 0; i < 4; i++) coins.push({ x, y, vx: (Math.random() - 0.5) * 260, vy: -150 - Math.random() * 200, life: 0.9 });
   sfx(520 + Math.random() * 80);
   if (me.hint) { me.hint = false; $("hint").style.opacity = 0; }
 }
-function sendClicks(now) {
-  if (now - me.lastBatch < CONFIG.batchMs || !me.pending) return;
+function sendClicks(now, force) {
+  if ((!force && now - me.lastBatch < CONFIG.batchMs) || !me.pending) return;
   me.lastBatch = now;
   const msg = { n: me.pending }; me.unseen += me.pending * clickOf(kingdom()); me.unseenAt = now; me.pending = 0;
   if (isHost()) applyClicks(net.sessionId, msg, true); else net.send("click", msg);
 }
+/** Gold as this player sees it: the kingdom's, plus my clicks still on their way. */
+const myGold = (v) => v.gold + me.pending * clickOf(v) + me.unseen;
 function buy(k) {
   if (ATTRACT) return;
+  const v = kingdom(), bd = BUILDINGS.find((b) => b.k === k), up = UPGRADES.find((u) => u.id === k);
+  if (myGold(v) < (bd ? costOf(bd, v) : up.cost)) { toast("Not enough gold yet"); sfx(160, "square"); return; }
+  sendClicks(performance.now(), true); // my clicks land first, so the gold I see is the gold the host spends
   if (isHost()) applyBuy(net.sessionId, { k }, true); else net.send("buy", { k });
   sfx(330, "square");
 }
@@ -526,8 +542,10 @@ const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 function fmt(n) {
   if (n < 1000) return n < 10 && n % 1 ? n.toFixed(1) : String(Math.floor(n));
-  const units = ["K", "M", "B", "T", "Qa", "Qi"], e = Math.min(units.length, Math.floor(Math.log10(n) / 3));
-  return (n / Math.pow(1000, e)).toFixed(n / Math.pow(1000, e) < 100 ? 1 : 0) + units[e - 1];
+  const units = ["K", "M", "B", "T", "Qa", "Qi"];
+  let e = Math.min(units.length, Math.floor(Math.log10(n) / 3)), x = n / Math.pow(1000, e), d = x < 99.95 ? 1 : 0;
+  if (Number(x.toFixed(d)) >= 1000 && e < units.length) { e++; x /= 1000; d = 1; } // 999,999 shows as 1.0M, not 1000K
+  return x.toFixed(d) + units[e - 1];
 }
 const shopButtons = new Map();
 function buildShop() {
@@ -561,7 +579,7 @@ let lastHud = 0;
 let dropped = false; // true while the connection is down: the HUD keeps showing "Reconnecting…"
 function hud(dt, now) {
   if (now - me.unseenAt > 2000) me.unseen = 0; // a batch that never landed (the host changed)
-  const v = kingdom(), n = livePlayers().length, target = v.gold + me.pending * clickOf(v) + me.unseen; // clicks still on their way count, so the counter never rolls back
+  const v = kingdom(), n = livePlayers().length, target = myGold(v); // clicks still on their way count, so the counter never rolls back
   me.shown += (target - me.shown) * Math.min(1, dt * 8); // the counter rolls toward the real gold
   if (Math.abs(target - me.shown) < 1) me.shown = target;
   $("gold").firstChild.textContent = fmt(Math.max(0, me.shown)) + " gold";
@@ -571,8 +589,8 @@ function hud(dt, now) {
   if (ATTRACT) return;
   $("net").textContent = net.offline ? "Offline: playing with bots" : dropped ? "Reconnecting…" : `Online · ${n} player${n === 1 ? "" : "s"}${isHost() ? " · you run the kingdom" : ""}`;
   $("givers").innerHTML = "<b>Top givers</b>" + v.crowd.slice(0, 5).map(([name, g]) => `<div class="${name === me.name ? "me" : ""}"><span>${esc(name)}</span><span>${fmt(g)}</span></div>`).join("");
-  for (const bd of BUILDINGS) { const b = shopButtons.get(bd.k), c = costOf(bd, v); b.querySelector(".cost").textContent = fmt(c); b.querySelector(".own").textContent = countOf(bd.k, v) || ""; b.classList.toggle("poor", v.gold < c); b.hidden = bd.cost > v.earned * 2 + 200 && !countOf(bd.k, v); }
-  for (const up of UPGRADES) { const b = shopButtons.get(up.id); b.querySelector(".cost").textContent = fmt(up.cost); b.classList.toggle("poor", v.gold < up.cost); b.hidden = v.u.includes(up.id) || up.cost > v.earned * 2 + 200; }
+  for (const bd of BUILDINGS) { const b = shopButtons.get(bd.k), c = costOf(bd, v); b.querySelector(".cost").textContent = fmt(c); b.querySelector(".own").textContent = countOf(bd.k, v) || ""; b.classList.toggle("poor", target < c); b.hidden = bd.cost > v.earned * 2 + 200 && !countOf(bd.k, v); }
+  for (const up of UPGRADES) { const b = shopButtons.get(up.id); b.querySelector(".cost").textContent = fmt(up.cost); b.classList.toggle("poor", target < up.cost); b.hidden = v.u.includes(up.id) || up.cost > v.earned * 2 + 200; }
 }
 function toast(text) { const t = $("toast"); t.textContent = text; t.classList.add("on"); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove("on"), 3200); }
 function showBuilt(m) {
@@ -599,10 +617,22 @@ $("back").onclick = () => { $("over").hidden = true; };
 /** Two players picked the same color at once (the joiner's first state can be empty): the later sessionId picks again. Bots use their own colors. */
 function fixColor() {
   const others = Object.entries(S.entities.players || {}).filter(([id]) => id !== net.sessionId);
+  fixName(others);
   if (!others.some(([id, p]) => p.h === me.color && id < net.sessionId)) return;
   const taken = new Set(others.map(([, p]) => p.h));
   me.color = COLORS.find((c) => !taken.has(c)) || me.color; net.me.set("h", me.color);
 }
+/** Two live players with the same name would share one giver total: the later sessionId picks another. */
+function fixName(others) {
+  const live = new Set(livePlayers()), names = new Set(others.filter(([id]) => live.has(id)).map(([, p]) => p.n));
+  if (!others.some(([id, p]) => live.has(id) && p.n === me.name && id < net.sessionId)) return;
+  const before = given();
+  for (let i = 0; i < 50 && names.has(me.name); i++) me.name = randomName();
+  if (names.has(me.name)) me.name = me.name.slice(0, 20) + " " + net.sessionId.slice(0, 3);
+  const mine = kingdom().crowd.find((c) => c[0] === me.name); me.baseline = (mine ? mine[1] : 0) - before; // keep what I gave so far
+  net.me.set("n", me.name);
+}
+const randomName = () => ["Merry", "Brave", "Lucky", "Jolly", "Clever", "Royal"][Math.floor(Math.random() * 6)] + " " + ["Baker", "Knight", "Miner", "Jester", "Farmer", "Bard"][Math.floor(Math.random() * 6)];
 let audio = null;
 function sfx(freq, type = "triangle") {
   try {
@@ -651,8 +681,7 @@ function frame(now) {
   net.onDisconnect(() => { dropped = true; $("net").textContent = "Reconnecting…"; });
   net.onReconnect(() => { dropped = false; });
   if (!net.offline && typeof MP !== "undefined") { player = MP.auth({ key: MP_CONNECT.key, apiUrl: MP_CONNECT.apiUrl }); board = player.leaderboard(CONFIG.board); }
-  me.name = (() => { try { return localStorage.getItem("mpa-name") || ""; } catch { return ""; } })() ||
-    ["Merry", "Brave", "Lucky", "Jolly", "Clever", "Royal"][Math.floor(Math.random() * 6)] + " " + ["Baker", "Knight", "Miner", "Jester", "Farmer", "Bard"][Math.floor(Math.random() * 6)];
+  me.name = (() => { try { return localStorage.getItem("mpa-name") || ""; } catch { return ""; } })() || randomName();
   const taken = new Set(Object.entries(S.entities.players || {}).filter(([id]) => id !== net.sessionId).map(([, p]) => p.h));
   me.color = COLORS.find((c) => !taken.has(c)) || COLORS[Math.floor(Math.random() * COLORS.length)];
   net.me.set({ n: me.name, h: me.color, hb: Date.now() });
